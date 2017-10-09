@@ -4,6 +4,6 @@ __author__ = 'aloriga'
 
 
 def init_test():
-    model = VolterraModel(order=3, memory=3)
+    model = VolterraModel(order=3, memory=5)
 
 init_test()

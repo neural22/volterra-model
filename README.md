@@ -1,2 +1,3 @@
 # volterra-model
-A library to design Volterra models. Just a draft for now, feel free to give a feedback and collaborate.
+A library to design Volterra models. Other information about Volterra models can be found here https://en.wikipedia.org/wiki/Volterra_series .
+
