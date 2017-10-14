@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from . import training
 __author__ = 'aloriga'
 
 
@@ -24,7 +24,8 @@ class VolterraModel(object):
         self.batch_size = kwargs.get('batch_size', 16)
         self.kernels = {}
         self.outputs = {}
-        self.output = None
+        self.model_output = None
+        self.real_output = None
         self._init_data_structs()
         self.build_model()
 
@@ -46,11 +47,19 @@ class VolterraModel(object):
             last_input = order_input
             self.outputs[order] = tf.reduce_sum(tf.multiply(order_input, self.kernels[order]), name="sum_{}".format(order), axis=1)
         # output is equal to the sum of all order outputs
-        self.output = tf.reduce_sum(list(self.outputs.values()), name="output_model", axis=0)
+        self.model_output = tf.reduce_sum(list(self.outputs.values()), name="output_model", axis=0)
         print("Model built")
 
-    def train(self, train_x, train_y):
-        pass
+    def get_loss(self):
+        self.real_output = tf.placeholder(tf.float32, [self.batch_size, 1], name="real_output")
+        return tf.metrics.mean_squared_error(self.real_output, self.model_output)[0]
+
+    def train(self, train_x, train_y, **kwargs):
+        training_options = training.TrainingOptions(loss=self.get_loss(),
+                                                    train_x=train_x,
+                                                    train_y=train_y,
+                                                    **kwargs)
+        training.apply(self, training_options)
 
     def test(self, test_x, test_y):
         pass
