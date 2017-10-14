@@ -51,7 +51,9 @@ class VolterraModel(object):
         print("Model built")
 
     def get_loss(self):
+        # define placeholder for real output
         self.real_output = tf.placeholder(tf.float32, [self.batch_size, 1], name="real_output")
+        # default loss is MSE
         return tf.metrics.mean_squared_error(self.real_output, self.model_output)[0]
 
     def train(self, train_x, train_y, **kwargs):
