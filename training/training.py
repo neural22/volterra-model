@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 import time
-
+from .loss import get_loss
 __author__ = 'aloriga'
 
 
@@ -13,7 +13,6 @@ class TrainingOptions(object):
     checkpoint_every = 10
     epochs = 100
     # mandatory
-    loss = None
     train_x = []
     train_y = []
 
@@ -21,6 +20,10 @@ class TrainingOptions(object):
         for option in kwargs:
             if hasattr(self, option):
                 setattr(self, option, kwargs.get(option))
+
+    # override this function with another loss function, should receive the model as param
+    def loss(self, model):
+        return get_loss(model)
 
 
 def get_training_ops(vars_to_update, options):
@@ -47,7 +50,11 @@ def apply(volterra_model, options):
         session_conf.gpu_options.allow_growth = False
         sess = tf.Session(config=session_conf)
         with sess.as_default():
-            train_op, global_step, grads_and_vars = get_training_ops(tf.global_variables())
+            # build the model and compute loss
+            volterra_model.build_model()
+            # initialize training operations
+            train_op, global_step, grads_and_vars = get_training_ops(tf.global_variables(), options)
+
             timestamp = str(int(time.time()))
             out_dir = os.path.join(options.path_save, "runs", timestamp)
             print("Writing to {}\n".format(out_dir))
