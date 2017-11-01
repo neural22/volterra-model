@@ -47,8 +47,7 @@ class VolterraModel(object):
             order_input = tf.reshape(order_input, [self.batch_size, self.model_memory**order])
             last_input = order_input
             self.outputs[order] = tf.reduce_sum(tf.multiply(order_input, self.kernels[order]), name="sum_{}".format(order), axis=1)
-        # output is equal to the sum of all order outputs
-        self.model_output = tf.reduce_sum(list(self.outputs.values()), name="output_model", axis=0)
+        self.model_output = tf.reduce_sum(list(self.outputs.values()), axis=0)
         print("Model built")
 
     def train(self, train_x, train_y, **kwargs):

@@ -9,12 +9,14 @@ class TrainingOptions(object):
     learning_rate = 1e4
     hist_grad = False
     path_save = ''
-    batch_size = 16
+    batch_size = 2
     checkpoint_every = 10
     epochs = 100
     # mandatory
     train_x = []
     train_y = []
+    _computed_loss = None
+    print_loss = True
 
     def __init__(self, **kwargs):
         for option in kwargs:
@@ -23,14 +25,16 @@ class TrainingOptions(object):
 
     # override this function with another loss function, should receive the model as param
     def loss(self, model):
-        return get_loss(model)
+        if self._computed_loss is None:
+            self._computed_loss = get_loss(model)
+        return self._computed_loss
 
 
-def get_training_ops(vars_to_update, options):
+def get_training_ops(volterra_model, vars_to_update, options):
     assert isinstance(options, TrainingOptions)
     init_step = tf.Variable(0, name="global_step", trainable=False)
     optimizer = tf.train.AdamOptimizer(learning_rate=options.learning_rate)
-    grads_and_vars = optimizer.compute_gradients(options.loss, var_list=vars_to_update, colocate_gradients_with_ops=True)
+    grads_and_vars = optimizer.compute_gradients(options.loss(volterra_model), var_list=vars_to_update, colocate_gradients_with_ops=True)
     op = optimizer.apply_gradients(grads_and_vars, global_step=init_step)
     return op, init_step, grads_and_vars
 
@@ -51,15 +55,16 @@ def apply(volterra_model, options):
         sess = tf.Session(config=session_conf)
         with sess.as_default():
             # build the model and compute loss
+            volterra_model.batch_size = options.batch_size
             volterra_model.build_model()
             # initialize training operations
-            train_op, global_step, grads_and_vars = get_training_ops(tf.global_variables(), options)
+            train_op, global_step, grads_and_vars = get_training_ops(volterra_model, tf.global_variables(), options)
 
             timestamp = str(int(time.time()))
             out_dir = os.path.join(options.path_save, "runs", timestamp)
             print("Writing to {}\n".format(out_dir))
 
-            loss_summary = tf.summary.scalar("loss", options.loss)
+            loss_summary = tf.summary.scalar("loss", options.loss(volterra_model))
             # acc_summary = tf.summary.scalar("accuracy", accuracy)
             summary_list = [loss_summary]
             # Keep track of gradient values and sparsity (optional)
@@ -95,25 +100,28 @@ def apply(volterra_model, options):
 
             saver = tf.train.Saver(max_to_keep=2)
 
-            def train_step(x_batch, y_batch):
+            def train_step(x_batch, y_batch, opts):
                 """
                 A single training step
                 """
                 feed_dict = {
-                    'input': x_batch,
-                    'real_output': y_batch,
+                    volterra_model.input: x_batch,
+                    volterra_model.real_output: y_batch,
                 }
-                _, step, summaries, train_loss = sess.run([train_op, global_step, train_summary_op, options.loss], feed_dict)
+                _, step, summaries, train_loss = sess.run([train_op, global_step, train_summary_op, options.loss(volterra_model)], feed_dict)
                 train_summary_writer.add_summary(summaries, step)
+                if opts.print_loss:
+                    print("loss: ", train_loss)
 
             for epoch in range(1, options.epochs + 1):
+                print("Ephoch {}".format(epoch))
                 # TODO implement Validation Step
                 for batch in generate_batches(options.train_x, options.train_y, options.batch_size):
-                    if batch is None or len(batch) < options.batch_size:
+                    if batch is None or len(batch[0]) < options.batch_size:
                         continue
-                    train_step(batch[0], batch[1])
+                    train_step(batch[0], batch[1], options)
                     current_step = tf.train.global_step(sess, global_step)
-                    print("Epoch {} - Step {}".format(epoch, current_step))
+                    print("Step {}".format(epoch, current_step))
                     if current_step % options.checkpoint_every == 0:
                         path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                         print("Saved model checkpoint to {}\n".format(path))
