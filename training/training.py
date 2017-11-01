@@ -6,7 +6,7 @@ __author__ = 'aloriga'
 
 
 class TrainingOptions(object):
-    learning_rate = 1e4
+    learning_rate = 1e2
     hist_grad = False
     path_save = ''
     batch_size = 2
@@ -111,7 +111,7 @@ def apply(volterra_model, options):
                 _, step, summaries, train_loss = sess.run([train_op, global_step, train_summary_op, options.loss(volterra_model)], feed_dict)
                 train_summary_writer.add_summary(summaries, step)
                 if opts.print_loss:
-                    print("loss: ", train_loss)
+                    print("Step loss: ", train_loss)
 
             for epoch in range(1, options.epochs + 1):
                 print("Ephoch {}".format(epoch))
