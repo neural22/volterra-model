@@ -1,33 +1,9 @@
 import tensorflow as tf
 import os
 import time
-from .loss import get_loss
+from .option import TrainingOptions
+
 __author__ = 'aloriga'
-
-
-class TrainingOptions(object):
-    learning_rate = 1e2
-    hist_grad = False
-    path_save = ''
-    batch_size = 2
-    checkpoint_every = 10
-    epochs = 100
-    # mandatory
-    train_x = []
-    train_y = []
-    _computed_loss = None
-    print_loss = True
-
-    def __init__(self, **kwargs):
-        for option in kwargs:
-            if hasattr(self, option):
-                setattr(self, option, kwargs.get(option))
-
-    # override this function with another loss function, should receive the model as param
-    def loss(self, model):
-        if self._computed_loss is None:
-            self._computed_loss = get_loss(model)
-        return self._computed_loss
 
 
 def get_training_ops(volterra_model, vars_to_update, options):
@@ -94,11 +70,12 @@ def apply(volterra_model, options):
             checkpoint_prefix = os.path.join(checkpoint_dir, "model")
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
+            volterra_model.stored_path = checkpoint_dir
 
             # Initialize all variables
             sess.run(tf.global_variables_initializer())
 
-            saver = tf.train.Saver(max_to_keep=2)
+            saver = tf.train.Saver(max_to_keep=options.max_to_keep)
 
             def train_step(x_batch, y_batch, opts):
                 """
@@ -110,21 +87,39 @@ def apply(volterra_model, options):
                 }
                 _, step, summaries, train_loss = sess.run([train_op, global_step, train_summary_op, options.loss(volterra_model)], feed_dict)
                 train_summary_writer.add_summary(summaries, step)
+                return train_loss
+
+            def test_step(x_batch, y_batch, opts):
+                """
+                A single test step
+                """
+                feed_dict = {
+                    volterra_model.input: x_batch,
+                    volterra_model.real_output: y_batch,
+                }
+                step, summaries, test_loss = sess.run([global_step, dev_summary_op, options.loss(volterra_model)], feed_dict)
+                dev_summary_writer.add_summary(summaries, step)
                 if opts.print_loss:
-                    print("Step loss: ", train_loss)
+                    print("Test Step loss: ", test_loss)
 
             for epoch in range(1, options.epochs + 1):
                 print("Ephoch {}".format(epoch))
-                # TODO implement Validation Step
                 for batch in generate_batches(options.train_x, options.train_y, options.batch_size):
                     if batch is None or len(batch[0]) < options.batch_size:
                         continue
-                    train_step(batch[0], batch[1], options)
+                    step_loss = train_step(batch[0], batch[1], options)
                     current_step = tf.train.global_step(sess, global_step)
-                    print("Step {}".format(epoch, current_step))
+                    if current_step % options.print_loss_every == 0:
+                        print("Epoch {} - Step {} - loss {}".format(epoch, current_step, step_loss))
                     if current_step % options.checkpoint_every == 0:
                         path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                         print("Saved model checkpoint to {}\n".format(path))
+                    if current_step % options.validation_every == 0 and options.validation_x:
+                        print("Validation Step")
+                        for validation_batch in generate_batches(options.validation_x, options.validation_y, options.batch_size):
+                            if batch is None or len(batch[0]) < options.batch_size:
+                                continue
+                            test_step(validation_batch[0], validation_batch[1], options)
 
 
 
